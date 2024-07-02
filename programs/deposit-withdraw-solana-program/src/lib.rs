@@ -4,6 +4,7 @@ declare_id!("4K7D7cDzpnGdKKFQhAP6TPLFnKkeVqVPkjRgggNHsd7C");
 
 #[program]
 pub mod deposit_withdraw_solana_program {
+
     use super::*;
 
     pub fn initialize(_ctx: Context<Initialize>, name: String) -> Result<()> {
@@ -30,6 +31,22 @@ pub mod deposit_withdraw_solana_program {
 
         Ok(())
     }
+
+    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+        let bank = &mut ctx.accounts.bank;
+        let user = &mut ctx.accounts.user;
+        if bank.owner != user.key() {
+            return Err(ProgramError::IncorrectProgramId.into());
+        }
+        let rent = Rent::get()?.minimum_balance(bank.to_account_info().data_len());
+        if **bank.to_account_info().lamports.borrow() - rent < amount {
+            return Err(ProgramError::InsufficientFunds.into());
+        }
+        **bank.to_account_info().try_borrow_mut_lamports()? -= amount;
+        **user.to_account_info().try_borrow_mut_lamports()? += amount;
+        Ok(())
+    }
+
 }
 
 #[derive(Accounts)]
@@ -61,4 +78,12 @@ pub struct Deposit<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Withdraw<'info>{
+    #[account(mut)]
+    pub bank: Account<'info, Bank>,
+    #[account(mut)]
+    pub user: Signer<'info>,
 }

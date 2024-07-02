@@ -1,6 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { DepositWithdrawSolanaProgram } from "../target/types/deposit_withdraw_solana_program";
+import { assert } from "chai";
 
 describe("deposit-withdraw-solana-program", () => {
   // Configure the client to use the local cluster.
@@ -18,8 +19,6 @@ describe("deposit-withdraw-solana-program", () => {
   // Generate keypair for the bank account
   const bank = anchor.web3.Keypair.generate();
 
-
-  
   it("Is initialized!", async () => {
     // Generate keypair for the bank account
     const [bank, bump] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -51,10 +50,6 @@ describe("deposit-withdraw-solana-program", () => {
       "confirmed"
     );
 
-    // console.log((await provider.connection.getAccountInfo(bank)).lamports);
-    // console.log((await provider.connection.getAccountInfo(payer.publicKey)).lamports);
-    // console.log((await provider.connection.getAccountInfo(user1.publicKey)).lamports);
-
     const name = "Test Bank";
     // Call the initialize instruction
     await program.methods
@@ -73,6 +68,9 @@ describe("deposit-withdraw-solana-program", () => {
     console.log(bankAccount.balance.toNumber(), 0);
     console.log(bankAccount.owner.toBase58(), payer.publicKey.toBase58());
 
+    console.log("Bank Balance",(await provider.connection.getAccountInfo(bank)).lamports);
+    console.log("Payer Balance",(await provider.connection.getAccountInfo(payer.publicKey)).lamports);
+
     const depositAmount = new anchor.BN(8000000000);
 
     const tx = await program.methods
@@ -85,15 +83,15 @@ describe("deposit-withdraw-solana-program", () => {
       .signers([user1])
       .rpc();
 
-    console.log((await provider.connection.getAccountInfo(bank)).lamports);
-    // console.log((await provider.connection.getAccountInfo(payer.publicKey)).lamports);
+      console.log("Bank Balance",(await provider.connection.getAccountInfo(bank)).lamports);
+      console.log("Payer Balance",(await provider.connection.getAccountInfo(payer.publicKey)).lamports);
     console.log(
       (await provider.connection.getAccountInfo(user1.publicKey)).lamports
     );
 
     const deposit2 = new anchor.BN(8000000000);
 
-     await program.methods
+    await program.methods
       .deposit(deposit2)
       .accounts({
         bank: bank,
@@ -103,11 +101,42 @@ describe("deposit-withdraw-solana-program", () => {
       .signers([user2])
       .rpc();
 
-    console.log((await provider.connection.getAccountInfo(bank)).lamports);
-    // console.log((await provider.connection.getAccountInfo(payer.publicKey)).lamports);
+      console.log("Bank Balance",(await provider.connection.getAccountInfo(bank)).lamports);
+      console.log("Payer Balance",(await provider.connection.getAccountInfo(payer.publicKey)).lamports);
     console.log(
       (await provider.connection.getAccountInfo(user2.publicKey)).lamports
     );
 
+    try {
+      // Try to withdraw from the bank account with a different user
+      await program.methods
+        .withdraw(deposit2)
+        .accounts({
+          bank: bank,
+          user: user2.publicKey,
+        })
+        .signers([user2])
+        .rpc();
+
+      assert.fail("Non-owner was able to withdraw funds");
+    } catch (err) {
+      // console.log(err.message);
+      assert.include(
+        err.message,
+        "Transaction simulation failed: Error processing Instruction 0: incorrect program id for instruction."
+      ); // Adjust the error message as per your program's implementation
+    }
+
+    await program.methods
+      .withdraw(deposit2)
+      .accounts({
+        bank: bank,
+        user: payer.publicKey,
+      })
+      .signers([payer])
+      .rpc();
+
+    console.log("Bank Balance",(await provider.connection.getAccountInfo(bank)).lamports);
+    console.log("Payer Balance",(await provider.connection.getAccountInfo(payer.publicKey)).lamports);
   });
 });
